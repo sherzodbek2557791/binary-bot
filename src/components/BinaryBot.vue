@@ -25,7 +25,10 @@
       </el-form-item>
     </el-form>
     <el-button type="primary" @click="tickSubscribe">tickSubscribe</el-button>
-    <span> {{ lastTick }}</span>
+    <span>
+      {{ lastTickFixed }}
+      <i class="recommend-barrier">{{ lastTickRecommend }}</i></span
+    >
     <el-row :gutter="10">
       <el-col :span="12">
         <el-checkbox v-model="leftContract.profitPercentAuto"
@@ -78,6 +81,14 @@
         />
       </el-col>
     </el-row>
+
+    <div
+      v-for="(item, index) of blackList"
+      :key="`blackList-${index}`"
+      style="color: red;"
+    >
+      {{ item }}
+    </div>
   </div>
 </template>
 
@@ -109,7 +120,10 @@ export default {
       reqId: 0,
       ws: null,
       lastTick: null,
+      lastTickRecommend: null,
+      blackList: [{ blackList: "here" }],
       leftContract: {
+        diffPercent: 0.000672039,
         profitPercentAuto: false,
         profitPercentChangeTo: 100.1,
         profitPercentScale: 0,
@@ -125,6 +139,7 @@ export default {
         oldProfitPercent: 0
       },
       rightContract: {
+        diffPercent: 0.0006335396875,
         profitPercentAuto: false,
         profitPercentChangeTo: 100.1,
         profitPercentScale: 0,
@@ -140,6 +155,12 @@ export default {
         oldProfitPercent: 0
       }
     };
+  },
+  computed: {
+    lastTickFixed() {
+      let { lastTick } = this;
+      return lastTick;
+    }
   },
   methods: {
     connect() {
@@ -214,14 +235,28 @@ export default {
             tick: { quote, epoch }
             // tick: { ask, bid, epoch, pip_size, quote, symbol }
           } = response;
-          this.lastTick = `t: ${quote}`;
-          this.proposal(epoch, this.leftContract, "leftContract");
-          this.proposal(epoch, this.rightContract, "rightContract");
+          this.lastTick = `t: ${quote.toFixed(4)}`;
+          this.lastTickRecommend = `${(
+            quote * this.leftContract.diffPercent
+          ).toFixed(4)}/${(quote * this.rightContract.diffPercent).toFixed(4)}`;
+          this.proposal(epoch, this.leftContract, "leftContract", quote);
+          this.proposal(epoch, this.rightContract, "rightContract", quote);
         },
         true
       );
     },
-    proposal(epoch, contract, key) {
+    proposal(epoch, contract, key, quote) {
+      this.$set(
+        contract,
+        "barrier",
+        "+" + (quote * contract.diffPercent).toFixed(4)
+      );
+      this.$set(
+        contract,
+        "barrier2",
+        "-" + (quote * contract.diffPercent).toFixed(4)
+      );
+
       let {
         contract_type,
         symbol,
@@ -232,6 +267,7 @@ export default {
         duration: durationI,
         duration_unit
       } = contract;
+
       this.send(
         {
           proposal: 1,
@@ -252,6 +288,24 @@ export default {
             return;
           }
 
+          /*console.log(
+            "porp: ",
+            JSON.stringify({
+              proposal: 1,
+              contract_type,
+              currency: "USD",
+              symbol,
+              amount: parseFloat(amountF),
+              barrier,
+              barrier2,
+              basis,
+              duration: parseInt(durationI),
+              duration_unit,
+              trading_period_start: epoch
+            }),
+            JSON.stringify(response)
+          );*/
+
           let contractObject = this[key];
           if (
             !response["proposal"] ||
@@ -271,6 +325,9 @@ export default {
             );
             Vue.set(contract, "profitPercent", profitPercent);
 
+            if (payout < parseFloat(amountF))
+              this.blackList.push({ response, profitPercent });
+
             this.profitPercentAutoChange(contractObject);
           }
         }
@@ -284,107 +341,92 @@ export default {
         profitPercentScale,
         profitPercent,
         barrier,
-        barrier2
-        // oldProfitPercent
+        barrier2,
+        oldProfitPercent
       } = contract;
-
-      let b1 = (parseFloat(barrier) + profitPercentScale).toFixed(4);
-      let b2 = (parseFloat(barrier2) - profitPercentScale).toFixed(4);
-      this.$set(contract, "barrier", (b1 >= 0 ? "+" : "") + `${b1}`);
-      this.$set(contract, "barrier2", (b2 >= 0 ? "+" : "") + `${b2}`);
 
       if (profitPercent === 0 || profitPercent === profitPercentChangeTo) {
         this.$set(contract, "profitPercentScale", 0);
         return;
       }
 
-      console.log("profitPercentScale", profitPercentScale);
+      let b1 = (parseFloat(barrier) + profitPercentScale).toFixed(4);
+      let b2 = (parseFloat(barrier2) - profitPercentScale).toFixed(4);
+      this.$set(contract, "barrier", (b1 >= 0 ? "+" : "") + `${b1}`);
+      this.$set(contract, "barrier2", (b2 >= 0 ? "+" : "") + `${b2}`);
+
+      let percentDiff = profitPercent - profitPercentChangeTo;
+      if (percentDiff >= 0) {
+        if (profitPercentScale === 0) {
+          this.$set(contract, "profitPercentScale", 0.0001);
+          return;
+        }
+
+        // go to down
+        let oldCurrentPercentDiff = parseFloat(
+          (oldProfitPercent - profitPercent).toFixed(4)
+        );
+        let oldCurrentPercentDiffDest =
+          oldCurrentPercentDiff === 0
+            ? 1
+            : oldCurrentPercentDiff / Math.abs(oldCurrentPercentDiff);
+        console.log("oldCurrentPercentDiff", oldCurrentPercentDiff);
+        console.log("oldCurrentPercentDiffDest", oldCurrentPercentDiffDest);
+        this.$set(
+          contract,
+          "profitPercentScale",
+          oldCurrentPercentDiffDest * profitPercentScale
+        );
+      } else {
+        // go to up
+      }
+
+      /*
+      let scaleDest = 0.0001;*/
+
+      /* if (75.0 < absDiff) {
+        scaleDest = 0.01;
+      } else if (50.0 < absDiff) {
+        scaleDest = 0.001;
+      } else if (0 < absDiff) {
+        scaleDest = 0.0001;
+      }*/
+
+      /*  let diffCom = 1;
+      if (profitPercentScale !== 0)
+        diffCom = profitPercentScale / Math.abs(profitPercentScale);
+
+      console.log("diffCom", diffCom);*/
+
+      /*if (percentDiff >= 0) {
+        console.log("if (percentDiff >= 0) {", percentDiff);
+        let oldCurrentPercentDiff = oldProfitPercent - profitPercent;
+        if (oldCurrentPercentDiff < 0)
+          this.$set(contract, "profitPercentScale", -1 * diffCom * scaleDest);
+        else this.$set(contract, "profitPercentScale", profitPercentScale);
+      } else {
+        console.log("} else {", percentDiff);
+        let oldCurrentPercentDiff = profitPercent - oldProfitPercent;
+        if (oldCurrentPercentDiff < 0)
+          this.$set(contract, "profitPercentScale", -1 * diffCom * scaleDest);
+        else this.$set(contract, "profitPercentScale", profitPercentScale);
+      }*/
 
       // oldProfitPercent;
       // profitPercent;
       // profitPercentChangeTo;
       //
       // profitPercentScale ->
-
-      /*let percentDiff = profitPercent - profitPercentChangeTo;
-      let t = percentDiff - oldProfitDiff;
-      if (t == 0) t = 1;
-      else t= */
-      /*if (profitPercent > 100.0) {
-        if (percentDiff > 0) {
-          this.$set(contract, "profitPercentScale", -0.0001);
-        } else {
-          this.$set(contract, "profitPercentScale", 0.0001);
-        }
-      } else {
-        if (percentDiff > 0) {
-          this.$set(contract, "profitPercentScale", 0.0001);
-        } else {
-          this.$set(contract, "profitPercentScale", -0.0001);
-        }
-      }*/
-      this.$set(contract, "oldProfitPercent", profitPercent);
+      if (Math.ceil(Math.abs(oldProfitPercent - profitPercent)) > 0)
+        this.$set(contract, "oldProfitPercent", profitPercent);
     }
-  },
-  watch: {
-    /*"leftContract.profitPercent": {
-      handler: function(newVal, oldVal) {
-        console.log("leftContract profitPercent ", newVal, oldVal);
-        if (oldVal === 0) return;
-
-        let {
-          profitPercentAuto,
-          profitPercentScale,
-          profitPercentChangeTo
-        } = this.leftContract;
-        if (!profitPercentAuto) return;
-        if (newVal === profitPercentChangeTo) {
-          Vue.set(this.leftContract, "profitPercentScale", 0);
-          return;
-        }
-
-        if (newVal > oldVal) {
-          if (profitPercentScale >= 0)
-            Vue.set(this.leftContract, "profitPercentScale", 0.0001);
-          else Vue.set(this.leftContract, "profitPercentScale", -0.0001);
-        } else if (newVal < oldVal) {
-          if (profitPercentScale >= 0)
-            Vue.set(this.leftContract, "profitPercentScale", -0.0001);
-          else Vue.set(this.leftContract, "profitPercentScale", 0.0001);
-        }
-      },
-      deep: true
-    },
-    "rightContract.profitPercent": {
-      handler: function(newVal, oldVal) {
-        console.log("rightContract profitPercent ", newVal, oldVal);
-        if (oldVal === 0) return;
-
-        let {
-          profitPercentAuto,
-          profitPercentScale,
-          profitPercentChangeTo
-        } = this.rightContract;
-        if (!profitPercentAuto) return;
-        if (newVal === profitPercentChangeTo) {
-          Vue.set(this.rightContract, "profitPercentScale", 0);
-          return;
-        }
-
-        if (newVal > oldVal) {
-          if (profitPercentScale >= 0)
-            Vue.set(this.leftContract, "profitPercentScale", -0.0001);
-          else Vue.set(this.leftContract, "profitPercentScale", 0.0001);
-        } else if (newVal < oldVal) {
-          if (profitPercentScale >= 0)
-            Vue.set(this.leftContract, "profitPercentScale", 0.0001);
-          else Vue.set(this.leftContract, "profitPercentScale", -0.0001);
-        }
-      },
-      deep: true
-    }*/
   }
 };
 </script>
 
-<style scoped></style>
+<style scoped>
+.recommend-barrier {
+  color: #989898;
+  font-size: 10pt;
+}
+</style>
