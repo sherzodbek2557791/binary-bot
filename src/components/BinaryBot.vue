@@ -121,7 +121,8 @@ export default {
         basis: "stake",
         duration: 2,
         duration_unit: "m",
-        profitPercent: 0
+        profitPercent: 0,
+        oldProfitPercent: 0
       },
       rightContract: {
         profitPercentAuto: false,
@@ -135,7 +136,8 @@ export default {
         basis: "stake",
         duration: 2,
         duration_unit: "m",
-        profitPercent: 0
+        profitPercent: 0,
+        oldProfitPercent: 0
       }
     };
   },
@@ -283,6 +285,7 @@ export default {
         profitPercent,
         barrier,
         barrier2
+        // oldProfitPercent
       } = contract;
 
       let b1 = (parseFloat(barrier) + profitPercentScale).toFixed(4);
@@ -297,8 +300,17 @@ export default {
 
       console.log("profitPercentScale", profitPercentScale);
 
-      let percentDiff = profitPercent - profitPercentChangeTo;
-      if (profitPercent > 100.0) {
+      // oldProfitPercent;
+      // profitPercent;
+      // profitPercentChangeTo;
+      //
+      // profitPercentScale ->
+
+      /*let percentDiff = profitPercent - profitPercentChangeTo;
+      let t = percentDiff - oldProfitDiff;
+      if (t == 0) t = 1;
+      else t= */
+      /*if (profitPercent > 100.0) {
         if (percentDiff > 0) {
           this.$set(contract, "profitPercentScale", -0.0001);
         } else {
@@ -308,13 +320,14 @@ export default {
         if (percentDiff > 0) {
           this.$set(contract, "profitPercentScale", 0.0001);
         } else {
-          this.$set(contract, "profitPercentScale", +0.0001);
+          this.$set(contract, "profitPercentScale", -0.0001);
         }
-      }
+      }*/
+      this.$set(contract, "oldProfitPercent", profitPercent);
     }
   },
   watch: {
-    "leftContract.profitPercent": {
+    /*"leftContract.profitPercent": {
       handler: function(newVal, oldVal) {
         console.log("leftContract profitPercent ", newVal, oldVal);
         if (oldVal === 0) return;
@@ -369,7 +382,7 @@ export default {
         }
       },
       deep: true
-    }
+    }*/
   }
 };
 </script>
