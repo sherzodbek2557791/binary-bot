@@ -1,15 +1,15 @@
 <template>
   <div id="app">
-    <binary-bot />
+    <check-number-bot />
   </div>
 </template>
 
 <script>
-import BinaryBot from "./components/BinaryBot.vue";
+import CheckNumberBot from "./components/CheckNumberBot.vue";
 
 export default {
   components: {
-    BinaryBot
+    CheckNumberBot
   }
 };
 </script>
@@ -21,6 +21,6 @@ export default {
   -moz-osx-font-smoothing: grayscale;
   text-align: center;
   color: #2c3e50;
-  margin-top: 60px;
+  margin-top: 20px;
 }
 </style>
